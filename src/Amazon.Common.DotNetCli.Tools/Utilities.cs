@@ -2,8 +2,6 @@
 using Amazon.S3;
 using Amazon.S3.Model;
 using Amazon.S3.Transfer;
-using Buildalyzer;
-using Buildalyzer.Environment;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -17,6 +15,9 @@ using System.Threading.Tasks;
 using Amazon.Util;
 using System.Text.RegularExpressions;
 using System.Collections;
+using Microsoft.Build.Definition;
+using Microsoft.Build.Evaluation;
+using Microsoft.Build.Evaluation.Context;
 
 namespace Amazon.Common.DotNetCli.Tools
 {
@@ -26,11 +27,6 @@ namespace Amazon.Common.DotNetCli.Tools
         /// Compiled Regex for $(Variable) token searches
         /// </summary>
         private readonly static Regex EnvironmentVariableTokens = new Regex(@"[$][(].*?[)]", RegexOptions.Compiled);
-
-        /// <summary>
-        /// Analyzer for *.*proj files. (Whatever is supported by MSBuild.)
-        /// </summary>
-        private readonly static AnalyzerManager AnalyzerManager = new AnalyzerManager();
 
         /// <summary>
         /// Replaces $(Variable) tokens with environment variables
@@ -65,7 +61,7 @@ namespace Amazon.Common.DotNetCli.Tools
         /// <summary>
         /// Helper method to find an environment variable if it exists
         /// </summary>
-        /// <param name="name">environennt variable name</param>
+        /// <param name="name">environment variable name</param>
         /// <returns>DictionaryEntry containing environment variable key value</returns>
         private static DictionaryEntry? FindEnvironmentVariable(string name)
         {
@@ -157,15 +153,22 @@ namespace Amazon.Common.DotNetCli.Tools
         {
             var projectFile = FindProjectFileInDirectory(projectLocation);
 
-            var project = AnalyzerManager.GetProject(projectFile);
-            var environmentOpts = new EnvironmentOptions
-            {
-                Restore = false,
-            };
-            var analyzerResults = project.Build(environmentOpts);
+            var project = Project.FromFile(projectFile,
+                new ProjectOptions
+                {
+                    ProjectCollection = new ProjectCollection(),
+                    EvaluationContext = EvaluationContext.Create(EvaluationContext.SharingPolicy.Shared),
+                    LoadSettings = ProjectLoadSettings.IgnoreMissingImports
+                });
 
-            var targetFrameworks = analyzerResults.TargetFrameworks.ToList();
-            return targetFrameworks.Count == 1 ? targetFrameworks[0] : null;
+            var targetFrameworksValue = project.GetPropertyValue("TargetFrameworks") ??
+                                   project.GetPropertyValue("TargetFramework");
+            
+            var targetFrameworks = targetFrameworksValue?
+                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .ToList();
+            
+            return targetFrameworks?.SingleOrDefault();
         }
 
         public static string FindProjectFileInDirectory(string directory)
