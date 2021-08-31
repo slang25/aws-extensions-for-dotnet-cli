@@ -161,8 +161,11 @@ namespace Amazon.Common.DotNetCli.Tools
                     LoadSettings = ProjectLoadSettings.IgnoreMissingImports
                 });
 
-            var targetFrameworksValue = project.GetPropertyValue("TargetFrameworks") ??
-                                   project.GetPropertyValue("TargetFramework");
+            var targetFrameworksValue = project.GetPropertyValue("TargetFrameworks");
+            if (string.IsNullOrEmpty(targetFrameworksValue))
+            {
+                targetFrameworksValue = project.GetPropertyValue("TargetFramework");
+            }
             
             var targetFrameworks = targetFrameworksValue?
                 .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
